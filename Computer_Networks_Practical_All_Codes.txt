@@ -1,0 +1,354 @@
+COMPUTER NETWORKS PRACTICALS — WORKING C PROGRAMS
+=================================================
+Each FILE section is a separate source file. Compile with: gcc filename.c -o app
+For client/server experiments, start the server first, then run the client in another terminal.
+These socket programs are for Linux (Ubuntu/WSL). Experiments 1, 2, 4, 5 and 11 are tool/theory practicals; steps are at the end.
+
+EXP 3(a): CRC — FILE: exp3a_crc.c
+---------------------------------
+#include <stdio.h>
+int main(void) {
+    int d[100], g[30], t[130], r[130], n, m, i, j, err=0;
+    printf("Data bit count: "); if(scanf("%d",&n)!=1 || n<1 || n>100) return 1;
+    printf("Data bits: "); for(i=0;i<n;i++) if(scanf("%d",&d[i])!=1) return 1;
+    printf("Generator bit count: "); if(scanf("%d",&m)!=1 || m<2 || m>30) return 1;
+    printf("Generator bits: "); for(i=0;i<m;i++) if(scanf("%d",&g[i])!=1) return 1;
+    for(i=0;i<n;i++) t[i]=d[i];
+    for(i=n;i<n+m-1;i++) t[i]=0;
+    for(i=0;i<n;i++) if(t[i]) for(j=0;j<m;j++) t[i+j]^=g[j];
+    printf("CRC: "); for(i=n;i<n+m-1;i++) printf("%d",t[i]);
+    printf("\nCodeword: "); for(i=0;i<n;i++) printf("%d",d[i]);
+    for(i=n;i<n+m-1;i++) printf("%d",t[i]);
+    printf("\nEnter received %d bits: ",n+m-1);
+    for(i=0;i<n+m-1;i++) if(scanf("%d",&r[i])!=1) return 1;
+    for(i=0;i<n;i++) if(r[i]) for(j=0;j<m;j++) r[i+j]^=g[j];
+    for(i=n;i<n+m-1;i++) if(r[i]) err=1;
+    puts(err ? "\nError detected" : "\nNo error detected");
+    return 0;
+}
+
+EXP 3(b): CHECKSUM — FILE: exp3b_checksum.c
+-------------------------------------------
+#include <stdio.h>
+int main(void) {
+    int n,x,i,sum=0,cs;
+    printf("Number of values: "); if(scanf("%d",&n)!=1 || n<1) return 1;
+    printf("Enter values (0-255): ");
+    for(i=0;i<n;i++){ scanf("%d",&x); sum+=x; while(sum>255) sum=(sum&255)+(sum>>8); }
+    cs=255-sum; printf("Checksum = %d\n",cs);
+    printf("Enter the %d values and checksum: ",n); sum=0;
+    for(i=0;i<=n;i++){ scanf("%d",&x); sum+=x; while(sum>255) sum=(sum&255)+(sum>>8); }
+    puts(sum==255 ? "No error detected" : "Error detected");
+    return 0;
+}
+
+EXP 3(c): HAMMING (7,4) — FILE: exp3c_hamming.c
+------------------------------------------------
+#include <stdio.h>
+int main(void) {
+    int a,b,c,d,p1,p2,p4,r[8],i,x,y,z,pos;
+    printf("Enter 4 data bits: "); scanf("%d%d%d%d",&a,&b,&c,&d);
+    p1=(a+b+d)%2; p2=(a+c+d)%2; p4=(b+c+d)%2;
+    printf("Code: %d %d %d %d %d %d %d\n",p1,p2,a,p4,b,c,d);
+    printf("Enter received 7 bits: "); for(i=1;i<=7;i++) scanf("%d",&r[i]);
+    x=(r[1]+r[3]+r[5]+r[7])%2;
+    y=(r[2]+r[3]+r[6]+r[7])%2;
+    z=(r[4]+r[5]+r[6]+r[7])%2; pos=4*z+2*y+x;
+    if(pos){ printf("Error at bit %d\n",pos); r[pos]^=1; }
+    else puts("No error detected");
+    printf("Corrected/received code: "); for(i=1;i<=7;i++) printf("%d ",r[i]);
+    return 0;
+}
+
+EXP 6(a): TCP SERVER — FILE: exp6a_tcp_server.c
+------------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+int main(void) {
+    int s,c,i; char b[100]; struct sockaddr_in a={0};
+    s=socket(AF_INET,SOCK_STREAM,0);
+    a.sin_family=AF_INET; a.sin_port=htons(8000); a.sin_addr.s_addr=INADDR_ANY;
+    if(bind(s,(void*)&a,sizeof(a))<0){perror("bind");return 1;}
+    listen(s,1); puts("TCP server waiting"); c=accept(s,NULL,NULL);
+    for(i=0;i<3;i++){ ssize_t n=recv(c,b,99,0); if(n<=0) break; b[n]=0;
+        printf("Received: %s\n",b); send(c,"ACK",3,0); }
+    close(c); close(s); return 0;
+}
+
+EXP 6(a): TCP CLIENT — FILE: exp6a_tcp_client.c
+------------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+int main(void) {
+    int s,i; char b[100]; struct sockaddr_in a={0};
+    s=socket(AF_INET,SOCK_STREAM,0); a.sin_family=AF_INET;
+    a.sin_port=htons(8000); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr);
+    if(connect(s,(void*)&a,sizeof(a))<0){perror("connect");return 1;}
+    for(i=1;i<=3;i++){ snprintf(b,sizeof(b),"Message %d",i); send(s,b,strlen(b),0);
+        ssize_t n=recv(s,b,99,0); if(n<=0) break; b[n]=0; printf("Reply: %s\n",b); }
+    close(s); return 0;
+}
+
+EXP 6(b): UDP SERVER — FILE: exp6b_udp_server.c
+------------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+int main(void) {
+    int s,i; socklen_t l; char b[100]; struct sockaddr_in a={0},cl;
+    s=socket(AF_INET,SOCK_DGRAM,0); a.sin_family=AF_INET;
+    a.sin_port=htons(8001); a.sin_addr.s_addr=INADDR_ANY;
+    if(bind(s,(void*)&a,sizeof(a))<0){perror("bind");return 1;}
+    for(i=0;i<3;i++){ l=sizeof(cl); ssize_t n=recvfrom(s,b,99,0,(void*)&cl,&l);
+        if(n<0) break; b[n]=0; printf("Received: %s\n",b);
+        sendto(s,"ACK",3,0,(void*)&cl,l); }
+    close(s); return 0;
+}
+
+EXP 6(b): UDP CLIENT — FILE: exp6b_udp_client.c
+------------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+int main(void) {
+    int s,i; char b[100]; struct sockaddr_in a={0};
+    s=socket(AF_INET,SOCK_DGRAM,0); a.sin_family=AF_INET;
+    a.sin_port=htons(8001); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr);
+    for(i=1;i<=3;i++){ snprintf(b,sizeof(b),"Message %d",i);
+        sendto(s,b,strlen(b),0,(void*)&a,sizeof(a));
+        ssize_t n=recvfrom(s,b,99,0,NULL,NULL); if(n<0) break;
+        b[n]=0; printf("Reply: %s\n",b); }
+    close(s); return 0;
+}
+
+EXP 6(c): SLIDING WINDOW — FILE: exp6c_slidingwindow.c
+------------------------------------------------------
+#include <stdio.h>
+int main(void) {
+    int n,w,start=0,end,i;
+    printf("Total frames and window size: "); scanf("%d%d",&n,&w);
+    if(n<1 || w<1) return 1;
+    while(start<n){ end=start+w; if(end>n) end=n;
+        printf("Send frames: "); for(i=start;i<end;i++) printf("%d ",i);
+        printf("\nACK for frames %d to %d\n\n",start,end-1); start=end; }
+    return 0;
+}
+
+EXP 7(a): DISTANCE VECTOR — FILE: exp7a_distancevector.c
+--------------------------------------------------------
+#include <stdio.h>
+#define INF 999
+int main(void) {
+    int n,c[10][10],d[10][10],i,j,k,change;
+    printf("Number of routers (max 10): "); scanf("%d",&n);
+    if(n<1 || n>10) return 1;
+    printf("Enter cost matrix (999 = no link):\n");
+    for(i=0;i<n;i++) for(j=0;j<n;j++){ scanf("%d",&c[i][j]); d[i][j]=c[i][j]; }
+    do { change=0;
+        for(i=0;i<n;i++) for(j=0;j<n;j++) for(k=0;k<n;k++)
+            if(c[i][k]!=INF && d[k][j]!=INF && c[i][k]+d[k][j]<d[i][j]){
+                d[i][j]=c[i][k]+d[k][j]; change=1; }
+    } while(change);
+    for(i=0;i<n;i++){ printf("Router %d:\n",i);
+        for(j=0;j<n;j++) printf("Destination %d cost %d\n",j,d[i][j]); }
+    return 0;
+}
+
+EXP 7(b): LINK STATE / DIJKSTRA — FILE: exp7b_linkstate.c
+---------------------------------------------------------
+#include <stdio.h>
+#define INF 999
+int main(void) {
+    int n,c[10][10],d[10],v[10]={0},i,j,s,u,min;
+    printf("Number of nodes (max 10): "); scanf("%d",&n);
+    if(n<1 || n>10) return 1;
+    printf("Cost matrix (999 = no link):\n");
+    for(i=0;i<n;i++) for(j=0;j<n;j++) scanf("%d",&c[i][j]);
+    printf("Source node (0-based): "); scanf("%d",&s);
+    if(s<0 || s>=n) return 1;
+    for(i=0;i<n;i++) d[i]=c[s][i]; d[s]=0;
+    for(i=0;i<n-1;i++){
+        min=INF; u=-1;
+        for(j=0;j<n;j++) if(!v[j] && d[j]<min){min=d[j];u=j;}
+        if(u==-1) break; v[u]=1;
+        for(j=0;j<n;j++) if(!v[j] && c[u][j]!=INF && d[u]!=INF && d[u]+c[u][j]<d[j])
+            d[j]=d[u]+c[u][j];
+    }
+    for(i=0;i<n;i++) printf("%d -> %d = %d\n",s,i,d[i]);
+    return 0;
+}
+
+EXP 8: STOP-AND-WAIT — FILE: exp8_stopandwait.c
+------------------------------------------------
+#include <stdio.h>
+int main(void) {
+    int n,l,i; printf("Number of frames and lost frame (0=none): ");
+    scanf("%d%d",&n,&l);
+    if(n<1 || l<0 || l>n) return 1;
+    for(i=1;i<=n;i++){
+        printf("Sending frame %d\n",i);
+        if(i==l) printf("Frame lost; timeout; retransmit frame %d\n",i);
+        printf("Frame %d received; ACK %d sent and received\n\n",i,i);
+    }
+    return 0;
+}
+
+EXP 9: HTTP MAIL SERVER — FILE: exp9_mail_server.c
+---------------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+int main(void) {
+    int s,c; char b[2000]; struct sockaddr_in a={0}; FILE *f;
+    s=socket(AF_INET,SOCK_STREAM,0); a.sin_family=AF_INET;
+    a.sin_port=htons(8080); a.sin_addr.s_addr=INADDR_ANY;
+    if(bind(s,(void*)&a,sizeof(a))<0){perror("bind");return 1;}
+    listen(s,1); puts("Mail server waiting on port 8080"); c=accept(s,NULL,NULL);
+    ssize_t n=recv(c,b,sizeof(b)-1,0);
+    if(n>0){ b[n]=0; printf("Request:\n%s\n",b);
+        f=fopen("mail.txt","a"); if(f){fprintf(f,"%s\n\n",b);fclose(f);}
+        const char *r="HTTP/1.1 200 OK\r\nContent-Length: 14\r\nConnection: close\r\n\r\nMail stored OK";
+        send(c,r,strlen(r),0); }
+    close(c); close(s); return 0;
+}
+
+EXP 9: HTTP MAIL CLIENT — FILE: exp9_mail_client.c
+--------------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+int main(void) {
+    int s; char mail[500],req[1000],reply[1000]; struct sockaddr_in a={0};
+    printf("Enter mail text: "); if(!fgets(mail,sizeof(mail),stdin)) return 1;
+    snprintf(req,sizeof(req),"POST /mail HTTP/1.1\r\nHost: localhost\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s",
+             strlen(mail),mail);
+    s=socket(AF_INET,SOCK_STREAM,0); a.sin_family=AF_INET;
+    a.sin_port=htons(8080); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr);
+    if(connect(s,(void*)&a,sizeof(a))<0){perror("connect");return 1;}
+    send(s,req,strlen(req),0); ssize_t n=recv(s,reply,sizeof(reply)-1,0);
+    if(n>0){reply[n]=0;printf("%s\n",reply);} close(s); return 0;
+}
+
+EXP 10(a): HALF-DUPLEX SERVER — FILE: exp10_half_server.c
+----------------------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+int main(void) {
+    int s,c; char b[200]; struct sockaddr_in a={0};
+    s=socket(AF_INET,SOCK_STREAM,0); a.sin_family=AF_INET;
+    a.sin_port=htons(9000); a.sin_addr.s_addr=INADDR_ANY;
+    if(bind(s,(void*)&a,sizeof(a))<0){perror("bind");return 1;}
+    listen(s,1); c=accept(s,NULL,NULL);
+    ssize_t n=recv(c,b,sizeof(b)-1,0);
+    if(n>0){b[n]=0;printf("Client: %s",b);}
+    printf("Reply: "); if(fgets(b,sizeof(b),stdin)) send(c,b,strlen(b),0);
+    close(c);close(s);return 0;
+}
+
+EXP 10(a): HALF-DUPLEX CLIENT — FILE: exp10_half_client.c
+----------------------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+int main(void) {
+    int s; char b[200]; struct sockaddr_in a={0};
+    s=socket(AF_INET,SOCK_STREAM,0); a.sin_family=AF_INET;
+    a.sin_port=htons(9000); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr);
+    if(connect(s,(void*)&a,sizeof(a))<0){perror("connect");return 1;}
+    printf("Message: "); if(fgets(b,sizeof(b),stdin)) send(s,b,strlen(b),0);
+    ssize_t n=recv(s,b,sizeof(b)-1,0); if(n>0){b[n]=0;printf("Server: %s",b);}
+    close(s);return 0;
+}
+
+EXP 10(b): FULL-DUPLEX DEMO SERVER — FILE: exp10_full_server.c
+----------------------------------------------------------------
+/* This is a simple send-then-receive demonstration based on the supplied practical.
+   True simultaneous full duplex needs threads/processes or nonblocking I/O. */
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+int main(void) {
+    int s,c; char b[200]="Message from server"; struct sockaddr_in a={0};
+    s=socket(AF_INET,SOCK_STREAM,0); a.sin_family=AF_INET;
+    a.sin_port=htons(9001); a.sin_addr.s_addr=INADDR_ANY;
+    if(bind(s,(void*)&a,sizeof(a))<0){perror("bind");return 1;}
+    listen(s,1); c=accept(s,NULL,NULL);
+    send(c,b,strlen(b),0);
+    ssize_t n=recv(c,b,sizeof(b)-1,0); if(n>0){b[n]=0;printf("Client: %s\n",b);}
+    close(c);close(s);return 0;
+}
+
+EXP 10(b): FULL-DUPLEX DEMO CLIENT — FILE: exp10_full_client.c
+----------------------------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+int main(void) {
+    int s; char b[200]; struct sockaddr_in a={0};
+    s=socket(AF_INET,SOCK_STREAM,0); a.sin_family=AF_INET;
+    a.sin_port=htons(9001); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr);
+    if(connect(s,(void*)&a,sizeof(a))<0){perror("connect");return 1;}
+    ssize_t n=recv(s,b,sizeof(b)-1,0); if(n>0){b[n]=0;printf("Server: %s\n",b);}
+    strcpy(b,"Message from client"); send(s,b,strlen(b),0);
+    close(s);return 0;
+}
+
+EXP 1: INTERNETWORKING DEVICES — NOTES
+--------------------------------------
+No C code normally required. Hub broadcasts; switch forwards by MAC; router connects networks
+using IP; repeater regenerates signals; bridge connects LAN segments; modem converts signals;
+NIC provides network access; gateway connects networks/protocols.
+
+EXP 2: LAN TOPOLOGIES — NOTES
+-----------------------------
+Bus: shared backbone. Star: devices connect to central hub/switch. Ring: devices form a loop.
+Mesh: multiple interconnections. Tree: hierarchical structure. Hybrid: combination of topologies.
+
+EXP 4: CISCO PACKET TRACER — STEPS
+----------------------------------
+1. Place PCs and a switch. 2. Connect with straight-through cables.
+3. Assign same-subnet IPs, e.g. 192.168.1.1 and 192.168.1.2, mask 255.255.255.0.
+4. Use Add Simple PDU (envelope), select source and destination; check packet success.
+
+EXP 5: NS-2 ON LINUX — STEPS AND SAMPLE TCL
+-------------------------------------------
+Install (Ubuntu/Debian): sudo apt update && sudo apt install ns2
+Verify: which ns
+Run: ns simulation.tcl
+
+Save the following as simulation.tcl:
+set ns [new Simulator]
+set f [open out.tr w]
+$ns trace-all $f
+set n0 [$ns node]
+set n1 [$ns node]
+$ns duplex-link $n0 $n1 1Mb 10ms DropTail
+$ns at 1.0 "finish"
+proc finish {} {
+    global ns f
+    $ns flush-trace
+    close $f
+    exit 0
+}
+$ns run
+
+EXP 11: WIRESHARK — STEPS
+-------------------------
+1. Select active interface and start capture. 2. Generate network traffic.
+3. Apply filters: tcp, udp, dns, http, ip.addr == 192.168.1.1.
+4. Inspect source/destination IP, ports, protocol and packet details; stop and save capture.
+
+END
